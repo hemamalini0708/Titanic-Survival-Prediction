@@ -1,0 +1,7 @@
+venv/
+logs/
+logging_all_files/
+__pycache__/
+*.pkl
+data/
+.idea/
