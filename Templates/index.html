@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titanic Survival Predictor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; padding: 20px; }
+        .form-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .form-title { color: #0d6efd; margin-bottom: 30px; text-align: center; }
+        .result-container {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .btn-algorithm {
+            margin: 5px;
+            width: 200px;
+        }
+        .btn-predict {
+            margin-top: 20px;
+            width: 100%;
+            padding: 10px;
+            font-size: 1.1rem;
+        }
+        .active-algorithm {
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        .model-status {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .available { color: #198754; }
+        .unavailable { color: #dc3545; }
+        .btn-algorithm:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1 class="form-title">Titanic Survival Prediction</h1>
+
+        <form id="predictionForm">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="Age" class="form-label">Age</label>
+                    <input type="number" class="form-control" id="Age" name="Age" step="0.1" min="0" max="100" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="Parch" class="form-label">Number of Parents/Children Aboard</label>
+                    <input type="number" class="form-control" id="Parch" name="Parch" min="0" max="10" required>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="Fare" class="form-label">Fare (£)</label>
+                    <input type="number" class="form-control" id="Fare" name="Fare" step="0.01" min="0" max="600" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="Sex" class="form-label">Sex</label>
+                    <select class="form-select" id="Sex" name="Sex" required>
+                        <option value="">Select...</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label for="Embarked" class="form-label">Port of Embarkation</label>
+                    <select class="form-select" id="Embarked" name="Embarked" required>
+                        <option value="">Select...</option>
+                        <option value="C">Cherbourg (C)</option>
+                        <option value="S">Southampton (S)</option>
+                        <option value="Q">Queenstown (Q)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="text-center mb-4">
+                <h5>Select Algorithm:</h5>
+                <div class="d-flex justify-content-center flex-wrap">
+                    <button type="button" class="btn btn-primary btn-algorithm"
+                            onclick="selectAlgorithm('naive_bayes', this)"
+                            id="btn-naive_bayes">Naive Bayes</button>
+                    <button type="button" class="btn btn-primary btn-algorithm"
+                            onclick="selectAlgorithm('logistic_regression', this)"
+                            id="btn-logistic_regression">Logistic Regression</button>
+                    <button type="button" class="btn btn-primary btn-algorithm"
+                            onclick="selectAlgorithm('decision_tree', this)"
+                            id="btn-decision_tree">Decision Tree</button>
+                </div>
+                <div id="modelStatus" class="model-status">Checking model availability...</div>
+                <input type="hidden" id="algorithm" name="algorithm" value="">
+            </div>
+
+            <button type="button" class="btn btn-success btn-predict" onclick="predict()">
+                <span id="predictText">Predict Survival</span>
+                <span id="spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="display: none;"></span>
+            </button>
+        </form>
+
+        <div id="resultContainer" class="result-container alert alert-info">
+            <h4>Prediction Result:</h4>
+            <p id="resultText">Waiting for prediction...</p>
+            <p id="algorithmUsed" class="fst-italic"></p>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let selectedAlgorithm = null;
+
+        // Check model availability on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/model-status')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    updateModelStatus(data.available_models);
+                })
+                .catch(error => {
+                    document.getElementById('modelStatus').textContent =
+                        'Error checking model status: ' + error.message;
+                });
+        });
+
+        function updateModelStatus(availableModels) {
+            const statusElement = document.getElementById('modelStatus');
+
+            // Enable/disable buttons based on availability
+            document.getElementById('btn-naive_bayes').disabled =
+                !availableModels.includes('naive_bayes');
+            document.getElementById('btn-logistic_regression').disabled =
+                !availableModels.includes('logistic_regression');
+            document.getElementById('btn-decision_tree').disabled =
+                !availableModels.includes('decision_tree');
+
+            // Update status text
+            statusElement.innerHTML = 'Available models: ' +
+                availableModels.map(m => `<span class="available">${m.replace('_', ' ')}</span>`).join(', ');
+        }
+
+        function selectAlgorithm(algorithm, buttonElement) {
+            selectedAlgorithm = algorithm;
+            document.getElementById('algorithm').value = algorithm;
+
+            // Update button styles to show selection
+            const buttons = document.querySelectorAll('.btn-algorithm');
+            buttons.forEach(btn => {
+                btn.classList.remove('active-algorithm');
+            });
+            buttonElement.classList.add('active-algorithm');
+        }
+
+        function predict() {
+            if (!selectedAlgorithm) {
+                alert('Please select an algorithm first');
+                return;
+            }
+
+            const form = document.getElementById('predictionForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            // Show loading state
+            const predictBtn = document.querySelector('.btn-predict');
+            const predictText = document.getElementById('predictText');
+            const spinner = document.getElementById('spinner');
+            predictText.textContent = 'Predicting...';
+            spinner.style.display = 'inline-block';
+            predictBtn.disabled = true;
+
+            // Show result container
+            const resultContainer = document.getElementById('resultContainer');
+            resultContainer.style.display = 'block';
+            document.getElementById('resultText').textContent = 'Processing...';
+            document.getElementById('algorithmUsed').textContent = '';
+            resultContainer.className = 'result-container alert alert-info';
+
+            const formData = new FormData(form);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('resultText').textContent = 'Error: ' + data.error;
+                    if (data.available_models) {
+                        document.getElementById('resultText').textContent +=
+                            ` (Available models: ${data.available_models.join(', ')})`;
+                        updateModelStatus(data.available_models);
+                    }
+                    resultContainer.className = 'result-container alert alert-danger';
+                } else {
+                    document.getElementById('resultText').textContent = data.result;
+                    document.getElementById('algorithmUsed').textContent =
+                        `Algorithm used: ${data.algorithm}`;
+                    resultContainer.className = 'result-container alert alert-success';
+                }
+            })
+            .catch(error => {
+                document.getElementById('resultText').textContent = 'Error: ' + error.message;
+                resultContainer.className = 'result-container alert alert-danger';
+            })
+            .finally(() => {
+                // Reset button state
+                predictText.textContent = 'Predict Survival';
+                spinner.style.display = 'none';
+                predictBtn.disabled = false;
+            });
+        }
+    </script>
+</body>
+</html>
